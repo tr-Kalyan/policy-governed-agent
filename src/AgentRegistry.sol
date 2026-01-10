@@ -24,6 +24,12 @@
 pragma solidity ^0.8.26;
 
 contract AgentRegistry {
+    error NotOwner();
+    error AgentAlreadyRegistered();
+    error AgentNotRegistered();
+    error AgentAlreadyActive();
+    error AgentAlreadyInactive();
+    error ZeroAddress();
 
     struct Agent {
         address owner;
@@ -36,11 +42,73 @@ contract AgentRegistry {
     event AgentRevoked(address indexed agent);
     event AgentReactivated(address indexed agent);
 
-    function getAgent(address agent) external view returns (address owner, bool active) {}
+    function registerAgent(address agent) external {
+        if (agent == address(0)) {
+            revert ZeroAddress();
+        }
 
-    function registerAgent(address agent) external {}
+        Agent storage a = agents[agent];
 
-    function revokeAgent(address agent) external {}
+        if (a.owner != address(0)) {
+            revert AgentAlreadyRegistered();
+        }
 
-    function reactivateAgent(address agent) external {}
+        a.owner = msg.sender;
+        a.active = true;
+
+        emit AgentRegistered(agent, msg.sender);
+    }
+
+    function revokeAgent(address agent) external {
+        Agent storage a = agents[agent];
+
+        if (a.owner == address(0)) {
+            revert AgentNotRegistered();
+        }
+
+        if (a.owner != msg.sender) {
+            revert NotOwner();
+        }
+
+        if (!a.active) {
+            revert AgentAlreadyInactive();
+        }
+
+        a.active = false;
+
+        emit AgentRevoked(agent);
+    }
+
+    function reactivateAgent(address agent) external {
+        Agent storage a = agents[agent];
+
+        if (a.owner == address(0)) {
+            revert AgentNotRegistered();
+        }
+
+        if (a.owner != msg.sender) {
+            revert NotOwner();
+        }
+
+        if (a.active) {
+            revert AgentAlreadyActive();
+        }
+
+        a.active = true;
+
+        emit AgentReactivated(agent);
+    }
+
+    function getAgent(address agent) external view returns (address owner, bool active) {
+        Agent storage a = agents[agent];
+        return (a.owner, a.active);
+    }
+
+    
+    //////////////////////
+    /// External view Functions
+    //////////////////////
+    function isAgentActive(address agent) external view returns (bool) {
+        return agents[agent].active;
+    }
 }
