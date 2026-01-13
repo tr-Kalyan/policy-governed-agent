@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import "./AgentRegistry.sol";
-
-interface IERC20 {
-    function transfer(address to, uint256 amount) external returns (bool);
-}
+import {AgentRegistry} from "./AgentRegistry.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract TreasuryWithPolicy {
+    using SafeERC20 for IERC20;
+
     error NotOwner();
     error AgentNotAuthorized();
     error RecipientNotAllowed();
@@ -30,7 +30,7 @@ contract TreasuryWithPolicy {
         uint256 cooldown;
     }
 
-    IERC20 public immutable usdc;
+    IERC20 public immutable USDC;
     address public owner;
     address public agentRegistry;
 
@@ -58,7 +58,7 @@ contract TreasuryWithPolicy {
     constructor(address _usdc, address _agentRegistry) {
         require(_usdc != address(0) && _agentRegistry != address(0), "zero address");
 
-        usdc = IERC20(_usdc);
+        USDC = IERC20(_usdc);
         agentRegistry = _agentRegistry;
         owner = msg.sender;
     }
@@ -83,7 +83,7 @@ contract TreasuryWithPolicy {
         if (paused) revert TreasuryPaused();
 
         // Identity check via registry
-        (address agentOwner, bool active) = AgentRegistry(agentRegistry).getAgent(intent.agent);
+        (, bool active) = AgentRegistry(agentRegistry).getAgent(intent.agent);
 
         if (!active) revert AgentNotAuthorized();
 
@@ -113,24 +113,32 @@ contract TreasuryWithPolicy {
         lastPaymentTime[intent.agent] = block.timestamp;
 
         // ---- interaction ----
-        bool ok = usdc.transfer(intent.recipient, intent.amount);
-        require(ok, "transfer failed");
+        USDC.safeTransfer(intent.recipient, intent.amount);
 
         emit PaymentExecuted(intent.agent, intent.recipient, intent.amount, intent.nonce);
     }
 
     function updatePolicy(uint256 perTxLimit, uint256 dailyLimit, uint256 cooldown) external onlyOwner {
+        if (paused) revert TreasuryPaused();
+
+        require(perTxLimit > 0, "perTxLimit=0");
+        require(dailyLimit >= perTxLimit, "daily < perTx");
+        
         policy = Policy({perTxLimit: perTxLimit, dailyLimit: dailyLimit, cooldown: cooldown});
 
         emit PolicyUpdated(perTxLimit, dailyLimit, cooldown);
     }
 
     function allowRecipient(address recipient) external onlyOwner {
+        if (paused) revert TreasuryPaused();
+
         allowedRecipients[recipient] = true;
         emit RecipientAllowed(recipient);
     }
 
     function removeRecipient(address recipient) external onlyOwner {
+        if (paused) revert TreasuryPaused();
+
         allowedRecipients[recipient] = false;
         emit RecipientRemoved(recipient);
     }
@@ -149,7 +157,7 @@ contract TreasuryWithPolicy {
     /// Internal Functions
     //////////////////////
 
-    function _onlyOwner() internal {
+    function _onlyOwner() internal view {
         if (msg.sender != owner) revert NotOwner();
     }
 

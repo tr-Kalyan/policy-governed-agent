@@ -104,7 +104,6 @@ contract AgentRegistry {
         return (a.owner, a.active);
     }
 
-    
     //////////////////////
     /// External view Functions
     //////////////////////
