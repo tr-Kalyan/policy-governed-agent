@@ -28,9 +28,9 @@ contract TreasuryWithPolicyTest is Test {
         usdc.mint(address(treasury), 1_000_000e6);
 
         treasury.updatePolicy(
-            100e6,   // perTxLimit
-            500e6,   // dailyLimit
-            1 hours  // cooldown
+            100e6, // perTxLimit
+            500e6, // dailyLimit
+            1 hours // cooldown
         );
 
         treasury.allowRecipient(recipient);
@@ -40,20 +40,12 @@ contract TreasuryWithPolicyTest is Test {
 
     function testExecutePaymentHappyPath() public {
         TreasuryWithPolicy.PaymentIntent memory intent =
-            TreasuryWithPolicy.PaymentIntent({
-                agent: agent,
-                recipient: recipient,
-                amount: 50e6,
-                nonce: 1
-            });
+            TreasuryWithPolicy.PaymentIntent({agent: agent, recipient: recipient, amount: 50e6, nonce: 1});
 
         vm.prank(address(0xdead)); // relayer / bot
         treasury.executePayment(intent);
 
-        assertEq(
-            MockUSDC(address(usdc)).balanceOf(recipient),
-            50e6
-        );
+        assertEq(MockUSDC(address(usdc)).balanceOf(recipient), 50e6);
     }
 
     function testRevokedAgentCannotExecute() public {
@@ -61,12 +53,7 @@ contract TreasuryWithPolicyTest is Test {
         registry.revokeAgent(agent);
 
         TreasuryWithPolicy.PaymentIntent memory intent =
-            TreasuryWithPolicy.PaymentIntent({
-                agent: agent,
-                recipient: recipient,
-                amount: 10e6,
-                nonce: 2
-            });
+            TreasuryWithPolicy.PaymentIntent({agent: agent, recipient: recipient, amount: 10e6, nonce: 2});
 
         vm.expectRevert(TreasuryWithPolicy.AgentNotAuthorized.selector);
         treasury.executePayment(intent);
@@ -74,12 +61,7 @@ contract TreasuryWithPolicyTest is Test {
 
     function testNonceReplayBlocked() public {
         TreasuryWithPolicy.PaymentIntent memory intent =
-            TreasuryWithPolicy.PaymentIntent({
-                agent: agent,
-                recipient: recipient,
-                amount: 10e6,
-                nonce: 3
-            });
+            TreasuryWithPolicy.PaymentIntent({agent: agent, recipient: recipient, amount: 10e6, nonce: 3});
 
         treasury.executePayment(intent);
 
@@ -92,15 +74,9 @@ contract TreasuryWithPolicyTest is Test {
         treasury.pause();
 
         TreasuryWithPolicy.PaymentIntent memory intent =
-            TreasuryWithPolicy.PaymentIntent({
-                agent: agent,
-                recipient: recipient,
-                amount: 10e6,
-                nonce: 4
-            });
+            TreasuryWithPolicy.PaymentIntent({agent: agent, recipient: recipient, amount: 10e6, nonce: 4});
 
         vm.expectRevert(TreasuryWithPolicy.TreasuryPaused.selector);
         treasury.executePayment(intent);
     }
-
 }

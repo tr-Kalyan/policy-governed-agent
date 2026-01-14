@@ -123,7 +123,7 @@ contract TreasuryWithPolicy {
 
         require(perTxLimit > 0, "perTxLimit=0");
         require(dailyLimit >= perTxLimit, "daily < perTx");
-        
+
         policy = Policy({perTxLimit: perTxLimit, dailyLimit: dailyLimit, cooldown: cooldown});
 
         emit PolicyUpdated(perTxLimit, dailyLimit, cooldown);
