@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 import "forge-std/Test.sol";
-import {MockUSDC} from "./mocks/MockUSDC.sol";
+import {MockUSDC} from "../src/mocks/MockUSDC.sol";
 import {AgentRegistry} from "../src/AgentRegistry.sol";
 import {TreasuryWithPolicy} from "../src/TreasuryWithPolicy.sol";
 

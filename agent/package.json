@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "ts-node test.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "demo": "ts-node main.ts"
   },
   "keywords": [],
   "author": "",
@@ -13,6 +13,7 @@
   "dependencies": {
     "@google/genai": "^1.35.0",
     "dotenv": "^17.2.3",
+    "ethers": "^6.16.0",
     "zod": "^4.3.5"
   },
   "devDependencies": {
