@@ -1,4 +1,3 @@
-
 # Policy-Governed Agent Payments (PGAP)
 
 ## Overview
@@ -36,7 +35,6 @@ Existing systems rely on off-chain trust or agent self-restraint, which does not
 
 ## High-Level Architecture
 
-
 ```
 User / Service Request
         ↓
@@ -55,7 +53,31 @@ TreasuryWithPolicy (on-chain)
 - executes or reverts
         ↓
 USDC (native Arc settlement)
+```
 
+---
+
+## Demo Overview
+
+This demo intentionally uses **small policy limits ($1 per transaction)** to make enforcement behavior immediately visible on testnet without exhausting faucet-limited USDC.
+
+The demo showcases five scenarios executed against the same on-chain Treasury:
+
+1. **Valid Payment** — Agent proposes a compliant payment → executed on-chain  
+2. **AI Refusal** — Agent refuses to propose an over-limit payment  
+3. **Cooldown Enforcement** — Treasury rejects rapid repeated payments  
+4. **Unauthorized Recipient** — Treasury blocks payments to non-allowlisted addresses  
+5. **Replay Protection** — Treasury rejects reused nonces deterministically  
+
+These scenarios demonstrate **defense in depth**:
+- AI performs bounded reasoning  
+- Smart contracts remain the final authority  
+
+**Run the demo:**
+```bash
+cd agent
+npm install
+npm run demo
 ```
 
 ---
@@ -80,13 +102,13 @@ USDC (native Arc settlement)
 
 **Purpose:** Act as a firewall between AI intent and real funds.
 
-**Enforced Invariants (examples):**
+**Enforced Invariants:**
 - Per-transaction spending limit  
 - Daily spending cap  
-- Cooldown between payments  
 - Recipient allowlist  
 - Replay protection via nonces  
 - Global pause for emergencies  
+- Cooldown between payments (rate-limits agent execution to reduce blast radius)
 
 **Critical Property:** The treasury does not care how the intent was generated—only whether it satisfies policy.
 
@@ -118,7 +140,7 @@ This preserves a strict trust boundary.
 
 **Responsibilities:**
 - Accept structured intent from Gemini  
-- Optionally call `validateIntent()`  
+- Optionally call `validateIntent()` for pre-checks  
 - Submit `executePayment()` transaction  
 - Log transaction hash and result  
 
@@ -129,7 +151,7 @@ The backend is stateless and replaceable.
 ## Why This Architecture Is Trustless
 
 | Layer | Trust Model |
-|------|-------------|
+|-------|-------------|
 | Gemini AI | Untrusted proposer |
 | Backend | Untrusted relayer |
 | Smart Contracts | Fully trusted enforcement |
@@ -141,6 +163,17 @@ Even if:
 - requests are spammed  
 
 ➡️ **Funds remain safe.**
+
+### Security Guarantees
+
+Even with high policy limits, the system maintains bounded risk:
+- **Per-agent isolation:** One compromised agent can't drain another's budget  
+- **Worst-case loss:** Limited to (perTxLimit × transactions per day)  
+- **Immediate revocation:** Owner can pause or revoke agent instantly  
+- **Audit trail:** All payments recorded on-chain for forensic analysis  
+- **No AI custody:** Agents never hold funds, only propose intents  
+
+This architecture enables autonomous operations while maintaining deterministic safety bounds.
 
 ---
 
@@ -165,8 +198,8 @@ PGAP was deployed in two configurations during development for clear and intenti
 This deployment represents the intended production architecture using native Arc USDC.
 
 **Contracts:**
-- AgentRegistry: `0xa2225ce1F9e764bF11a57d3E8dea0492487562Ea`
-- TreasuryWithPolicy: `0x9fB95CE21352d7FAB5A8A79aEB1E30B76F11B034`
+- AgentRegistry: `0xa2225ce1F9e764bF11a57d3E8dea0492487562Ea`  
+- TreasuryWithPolicy: `0x9fB95CE21352d7FAB5A8A79aEB1E30B76F11B034`  
 
 **Properties:**
 - Uses native Arc Testnet USDC  
@@ -182,9 +215,9 @@ A successful on-chain payment was executed from this treasury using Arc Testnet 
 This deployment exists solely to enable exhaustive testing without faucet constraints.
 
 **Contracts:**
-- AgentRegistry: `0x853b31b0541059c72a76deeB23eA4414AdB42B58`
-- TreasuryWithPolicy: `0x2c90738D80C19dDe2094B5E58b4dC06202fa1243`
-- MockUSDC: `0xBa9c42df8e2b800902A5191971634825F958DA04`
+- AgentRegistry: `0x853b31b0541059c72a76deeB23eA4414AdB42B58`  
+- TreasuryWithPolicy: `0x2c90738D80C19dDe2094B5E58b4dC06202fa1243`  
+- MockUSDC: `0xBa9c42df8e2b800902A5191971634825F958DA04`  
 
 **Rationale:**
 - Arc Testnet USDC is faucet-limited  
@@ -194,7 +227,6 @@ This deployment exists solely to enable exhaustive testing without faucet constr
 This separation ensures testing rigor without weakening the real deployment.
 
 ---
-
 
 ## Verified Arc USDC Transaction
 
@@ -206,27 +238,166 @@ PGAP successfully executed a live payment using **native Arc Testnet USDC**, ful
 - **Relayer:** `0x8eCaDD0bA353048e9c92A5a2be341ce902250C41`  
 - **Amount:** 1 USDC  
 - **Transaction Hash:**  
-  `0x735a3abf24866c376d8150c7698d001d3f36183ee991c77633cf08c24c818185`
+  `0x735a3abf24866c376d8150c7698d001d3f36183ee991c77633cf08c24c818185`  
+- **Explorer:** [View on Arcscan](https://testnet.arcscan.app/tx/0x735a3abf24866c376d8150c7698d001d3f36183ee991c77633cf08c24c818185?tab=index)
 
 This transaction demonstrates that:
-- AI proposed the payment
-- Smart contracts enforced all limits
-- Settlement occurred directly in Arc USDC
-
-
-## Note on USDC Availability
-
-Arc Testnet USDC is currently faucet-limited.  
-A request has been submitted to Circle for additional testnet USDC to enable higher-volume and multi-payment demonstrations.
+- AI proposed the payment  
+- Smart contracts enforced all limits  
+- Settlement occurred directly in Arc USDC  
 
 ---
 
-## Design Intent
+## Configurable Policy Limits (Production)
 
-Maintaining both deployments is a deliberate engineering decision:
+The $1 per-transaction limit used in the demo is intentionally conservative for clarity and testnet constraints.
 
-- Native USDC deployment proves correctness and settlement integrity  
-- MockUSDC deployment proves safety under adversarial conditions  
+In production, organizations configure policy thresholds based on risk tolerance—**without changing contract logic**.
 
-This mirrors real-world protocol development with production contracts and isolated test environments.
+| Organization Type | Per-Tx Limit | Daily Limit | Example Use Case |
+|-------------------|-------------|-------------|------------------|
+| Small Business | $100 | $500 | API calls, stock assets |
+| Mid-Size Company | $1,000 | $10,000 | Data subscriptions |
+| Enterprise | $10,000+ | $100,000+ | Real-time research feeds |
 
+Only configuration values change via `updatePolicy()`.  
+The enforcement engine remains identical.
+
+**Example:**
+```solidity
+treasury.updatePolicy(
+    100_000_000_000,  // $100,000 per-tx
+    500_000_000_000,  // $500,000 daily
+    1 hours           // cooldown
+);
+```
+
+---
+
+## Service Integration Patterns
+
+### Pattern 1: Direct API Integration
+```
+Agent queries API pricing endpoint
+API returns: { "service": "weather", "cost": 0.50 }
+Agent proposes payment intent
+Treasury validates and executes
+```
+
+### Pattern 2: Invoice-Based
+```
+Service emails invoice
+Frontend OCR extracts amount
+Human reviews and approves
+Agent executes payment
+```
+
+### Pattern 3: Subscription Management
+```
+Monthly subscription: $49
+Agent auto-pays on due date
+Treasury enforces limits
+Human monitors via dashboard
+```
+
+---
+
+## Why This Architecture Scales
+
+- ✅ **Configurable limits** — Adjust risk tolerance without code changes  
+- ✅ **Multi-agent support** — Each agent tracked independently  
+- ✅ **Composable policies** — Per-tx + daily + cooldown + allowlist  
+- ✅ **Deterministic enforcement** — No AI can bypass on-chain rules  
+- ✅ **Audit trail** — All payments recorded on-chain  
+- ✅ **Emergency controls** — Pause mechanism for incidents  
+
+The system is production-ready; deployment specifics depend on organizational requirements.
+
+---
+
+## Future Extensions
+
+Future iterations may include:
+- Frontend dashboards for policy configuration  
+- Invoice/receipt parsing to pre-fill intents  
+- Approval queues for over-limit payments  
+- Reputation-based dynamic policy adjustments  
+
+These features extend the system but do not alter its core security model.
+
+---
+
+## Quick Start
+
+### Prerequisites
+- Foundry installed  
+- Node.js v18+  
+- Arc Sepolia testnet access  
+
+### Installation
+
+```bash
+git clone git@github.com:tr-Kalyan/policy-governed-agent.git
+cd policy-governed-agent
+
+# Install contract dependencies
+forge install
+
+# Install agent dependencies
+cd agent
+npm install
+```
+
+### Run Demo
+
+```bash
+cd agent
+npm run demo
+```
+
+---
+
+## Testing
+
+```bash
+# Smart contract tests
+forge test -vvv
+
+# Agent integration tests
+cd agent
+npm test
+```
+
+---
+
+## Built With
+
+- [Solidity ^0.8.26](https://soliditylang.org/)  
+- [Foundry](https://book.getfoundry.sh/)  
+- [OpenZeppelin Contracts](https://docs.openzeppelin.com/contracts/)  
+- [Arc Network](https://arc.gateway.fm/)  
+- [Circle USDC](https://www.circle.com/usdc)  
+- [Google Gemini](https://ai.google.dev/)  
+
+---
+
+## Hackathon Tracks
+
+This project competes in:
+- 🏆 **Best Trustless AI Agent** (Circle + Arc)  
+
+---
+
+## License
+
+MIT
+
+---
+
+## Acknowledgments
+
+Built at [@lablabai](https://lablab.ai)'s Agentic Commerce on Arc Hackathon
+
+Powered by:
+- [@BuildOnCircle](https://twitter.com/BuildOnCircle)  
+- [@GoogleAI](https://twitter.com/GoogleAI)
