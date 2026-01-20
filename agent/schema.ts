@@ -11,6 +11,28 @@ export const AgentInputSchema = z.object({
   })
 });
 
+export const proposePaymentTool = {
+  name: "propose_payment",
+  description: "Propose a USDC payment intent subject to policy constraints",
+  parameters: {
+    type: "object",
+    properties: {
+      agent: { type: "string" },
+      recipient: { type: "string" },
+      amount: {
+        type: "string",
+        description: "USDC amount in base units (6 decimals)"
+      },
+      nonce: { type: "string" },
+      reasoning: { type: "string" }
+    },
+    required: ["agent", "recipient", "amount", "nonce"]
+  }
+} as const;
+
+
+
+
 export const PaymentIntentSchema = z.object({
   agent: z.string(),
   recipient: z.string(),
@@ -21,3 +43,4 @@ export const PaymentIntentSchema = z.object({
 
 export type AgentInput = z.infer<typeof AgentInputSchema>;
 export type PaymentIntent = z.infer<typeof PaymentIntentSchema>;
+

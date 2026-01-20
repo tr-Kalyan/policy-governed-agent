@@ -20,7 +20,7 @@ async function main() {
   await ensureCooldownElapsed(AGENT_ADDRESS, BigInt(policy.cooldown));
 
   const intent = await proposePayment({
-    request: `Pay 1 USDC to API provider at ${RECIPIENT_ADDRESS}`,
+    request: `Pay 0.1 USDC to API provider at ${RECIPIENT_ADDRESS}`,
     agentAddress: AGENT_ADDRESS,
     policy: {
       perTxLimit: policy.perTx,

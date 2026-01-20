@@ -1,14 +1,30 @@
 import { GoogleGenAI } from "@google/genai";
-import { PaymentIntentSchema, AgentInput } from "./schema";
+import { PaymentIntentSchema, AgentInput, proposePaymentTool, PaymentIntent } from "./schema";
 import { buildPrompt } from "./prompt";
 import { ethers } from "ethers";
 import "dotenv/config";
 
-// ================== NONCE ==================
-let nextNonce = 1n;
 
-function getNextNonce(): string {
-  return (nextNonce++).toString();
+
+export type ExecutionIntent = {
+  agent: string;
+  recipient: string;
+  amount: string;
+  nonce: string;
+};
+
+
+// ================== NONCE ==================
+// Nonce is monotonically increasing per agent.
+// Off-chain nonce is used only for sequencing.
+// On-chain contract enforces replay protection.
+const agentNonces = new Map<string, bigint>();
+
+function getNextNonce(agent: string): string {
+  const current = agentNonces.get(agent) ?? BigInt(Date.now());
+  const next = current + 1n;
+  agentNonces.set(agent, next);
+  return next.toString();
 }
 
 // ================== ENV ==================
@@ -69,7 +85,7 @@ export async function getPolicy(agentAddress: string) {
 }
 
 export async function proposePayment(input: AgentInput) {
-  const nonce = getNextNonce();
+  const nonce = getNextNonce(input.agentAddress);
 
   const enrichedInput = {
     ...input,
@@ -78,25 +94,52 @@ export async function proposePayment(input: AgentInput) {
 
   const genAI = new GoogleGenAI({
     apiKey: GEMINI_API_KEY,
-    apiVersion: "v1"
+    apiVersion: "v1beta"
   });
 
+  // 1. Try to force structured output via config first (Best for Gemini 3)
   const result = await genAI.models.generateContent({
-    model: "gemini-2.5-flash-lite",
+    model: "gemini-3-flash-preview", 
     contents: [{ role: "user", parts: [{ text: buildPrompt(enrichedInput) }] }],
-    config: { ["response_mime_type" as any]: "application/json" } as any
-  });
+    tools: [{ functionDeclarations: [proposePaymentTool] }],
+    // TOOL CONFIG IS KEY: Force the model to use the tool if it can
+    toolConfig: {
+      functionCallingConfig: {
+        mode: "ANY" // Forces the model to call a function
+      }
+    }
+  } as any);
 
-  const text = result?.text;
-  if (!text) throw new Error("Empty Gemini response");
+  // 2. The Extraction Logic: Handle both Tool Calls AND JSON Text
+  const candidate = result.candidates?.[0];
+  const functionCall = candidate?.content?.parts?.[0]?.functionCall;
+  const textResponse = candidate?.content?.parts?.[0]?.text;
 
-  const parsed = JSON.parse(text.replace(/```json/g, "").replace(/```/g, "").trim());
-  if (parsed.reject) throw new Error(`Agent rejected: ${parsed.reason}`);
+  // CASE A: It worked as a Tool Call (Ideal)
+  if (functionCall && functionCall.name === "propose_payment") {
+    console.log("✅ Gemini 3 used Function Calling");
+    return PaymentIntentSchema.parse(functionCall.args);
+  }
 
-  return PaymentIntentSchema.parse(parsed);
+  // CASE B: It returned JSON text instead (Fallback)
+  if (textResponse) {
+    console.warn("⚠️ Gemini 3 returned text. Attempting JSON parse...");
+    try {
+      // Clean up markdown code blocks if present
+      const cleanJson = textResponse.replace(/```json/g, "").replace(/```/g, "").trim();
+      const parsed = JSON.parse(cleanJson);
+      
+      // Map the parsed JSON to your schema if needed, or just validate
+      // (Assuming the text output matches your schema structure)
+      return PaymentIntentSchema.parse(parsed);
+    } catch (e) {
+      console.error("Failed to parse JSON text:", textResponse);
+    }
+  }
+  throw new Error("Agent did not propose a valid payment intent (No tool call or valid JSON)");
 }
 
-export async function executePayment(intent: any) {
+export async function executePayment(intent: ExecutionIntent) {
   const treasury = new ethers.Contract(TREASURY_ADDRESS, TreasuryABI, signer);
 
   const tx = await treasury.executePayment({
